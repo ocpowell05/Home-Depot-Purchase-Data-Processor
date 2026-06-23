@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Home Depot → Job Sheets · Painting Plus</title>
+<style>
+  :root {
+    --bg: #f6f5f2;
+    --card: #ffffff;
+    --ink: #1c1c1a;
+    --muted: #6b6a65;
+    --line: #e3e1db;
+    --accent: #d2691e;       /* Home Depot orange, muted */
+    --accent-ink: #ffffff;
+    --ok: #2f7d4f;
+    --shadow: 0 1px 2px rgba(0,0,0,.05), 0 4px 12px rgba(0,0,0,.04);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+  }
+  header {
+    padding: 28px 24px 20px;
+    border-bottom: 1px solid var(--line);
+    background: var(--card);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; letter-spacing: -.01em; }
+  header p { margin: 0; color: var(--muted); font-size: 14px; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 24px; }
+
+  .drop {
+    border: 1.5px dashed var(--line);
+    border-radius: 12px;
+    background: var(--card);
+    padding: 28px 24px;
+    text-align: center;
+    transition: border-color .15s, background .15s;
+  }
+  .drop.drag { border-color: var(--accent); background: #fff8f2; }
+  .drop h2 { margin: 0 0 6px; font-size: 16px; }
+  .drop p { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+  .files { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-top: 14px; }
+  .slot {
+    flex: 1 1 200px; min-width: 200px; max-width: 320px;
+    border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px;
+    text-align: left; background: var(--bg); font-size: 13px;
+  }
+  .slot .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .slot .name { margin-top: 4px; font-weight: 600; word-break: break-all; }
+  .slot.empty .name { color: var(--muted); font-weight: 400; }
+  .slot.ready { border-color: var(--ok); }
+
+  button {
+    font: inherit; cursor: pointer; border: none; border-radius: 8px;
+    padding: 9px 16px; background: var(--accent); color: var(--accent-ink);
+    font-weight: 600; transition: filter .12s, transform .02s;
+  }
+  button:hover { filter: brightness(1.05); }
+  button:active { transform: translateY(1px); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .filebtn { display: inline-block; }
+  input[type=file] { display: none; }
+
+  .bar {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    margin: 22px 0 14px;
+  }
+  .bar .count { color: var(--muted); font-size: 14px; margin-right: auto; }
+  .search {
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px;
+    font: inherit; min-width: 200px; background: var(--card);
+  }
+  .datefilter {
+    display: inline-flex; align-items: center; gap: 6px;
+    color: var(--muted); font-size: 13px;
+  }
+  .datefilter input { font: inherit; border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 10px; background: var(--card); color: var(--ink); }
+
+  .row {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 10px; box-shadow: var(--shadow);
+    display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; align-items: start;
+  }
+  .meta { display: flex; gap: 16px; flex-wrap: wrap; align-items: baseline; }
+  .meta .date { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+  .meta .job { font-weight: 700; }
+  .meta .total { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .items {
+    grid-column: 1 / -1;
+    margin: 6px 0 0; padding: 10px 12px; background: var(--bg);
+    border-radius: 8px; font-size: 13.5px; white-space: pre-line; color: #333;
+  }
+  .copy { align-self: start; min-width: 84px; }
+  .copy.done { background: var(--ok); }
+
+  .empty-state { text-align: center; color: var(--muted); padding: 40px 0; }
+  .err {
+    background: #fdecea; border: 1px solid #f3c2bc; color: #8a2a1d;
+    border-radius: 8px; padding: 12px 14px; margin: 16px 0; font-size: 14px;
+  }
+  footer { color: var(--muted); font-size: 12px; text-align: center; padding: 24px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Home Depot → Job Sheets</h1>
+  <p>Drop the two purchase-history exports. Copy each row into its job's sheet.</p>
+</header>
+
+<div class="wrap">
+  <div class="drop" id="drop">
+    <h2>Drop both CSV files here</h2>
+    <p>The summary export and the details export — either order is fine.</p>
+    <label class="filebtn">
+      <input type="file" id="picker" accept=".csv" multiple>
+      <span class="filebtn"><button type="button" onclick="document.getElementById('picker').click()">Choose files</button></span>
+    </label>
+    <div class="files">
+      <div class="slot empty" id="slot-summary">
+        <div class="label">Summary export</div>
+        <div class="name">waiting…</div>
+      </div>
+      <div class="slot empty" id="slot-details">
+        <div class="label">Details export</div>
+        <div class="name">waiting…</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="error"></div>
+
+  <div id="results" style="display:none;">
+    <div class="bar">
+      <span class="count" id="count"></span>
+      <label class="datefilter">On or after
+        <input type="date" id="since">
+      </label>
+      <button class="ghost" id="clear-since" title="Clear date filter">Clear</button>
+      <input class="search" id="search" type="search" placeholder="Filter by job name…">
+      <button class="ghost" id="download">Download CSV</button>
+    </div>
+    <div id="rows"></div>
+  </div>
+</div>
+
+<footer>
+  Runs entirely in your browser — no files are uploaded anywhere.
+</footer>
+
+<!-- PapaParse for robust CSV handling (quoted cells, embedded newlines) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script>
+"use strict";
+
+// ---- Config (mirrors hd_processor.py) ----
+const PREAMBLE_ROWS = 6;
+const DROP_DEPARTMENTS = new Set(["FEES"]);
+const DROP_CLASSES = new Set(["CONVENIENCE"]);
+const DROP_DESC_RE = /recyc|paintcare|bag fee/i;
+const SUMMARY_MARKERS = ["Total Amount Paid", "Order Origin"];
+const DETAILS_MARKERS = ["SKU Description", "Department Name"];
+
+let parsed = { summary: null, details: null };
+let output = [];
+
+// ---- Helpers ----
+function stripPreambleAndParse(text) {
+  // Drop the 6 company-info lines above the real header
+  const lines = text.split(/\r?\n/);
+  const body = lines.slice(PREAMBLE_ROWS).join("\n");
+  return Papa.parse(body, { header: true, skipEmptyLines: true }).data;
+}
+
+function classify(rows) {
+  if (!rows.length) return null;
+  const cols = Object.keys(rows[0]);
+  if (SUMMARY_MARKERS.every(c => cols.includes(c))) return "summary";
+  if (DETAILS_MARKERS.every(c => cols.includes(c))) return "details";
+  return null;
+}
+
+function money(v) {
+  if (v == null || v === "") return 0;
+  const n = parseFloat(String(v).replace(/[$,]/g, "").trim());
+  return isNaN(n) ? 0 : n;
+}
+function fmtMoney(n) {
+  return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function storeNum(v) {
+  const m = String(v ?? "").match(/#?(\d+)/);
+  return m ? m[1] : "";
+}
+function fmtDate(v) {
+  // input "2026-06-23" -> "6/23/2026"
+  const m = String(v ?? "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return v ?? "";
+  return `${+m[2]}/${+m[3]}/${m[1]}`;
+}
+function titleCase(s) {
+  return String(s).toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function txnKey(row, originField) {
+  const order = String(row["Order Number"] ?? "").trim();
+  if (order) return order;
+  const store = storeNum(row[originField]);
+  return `${row["Date"]}|${store}|${row["Transaction ID"]}`;
+}
+
+function formatLine(row) {
+  let qty = row["Quantity"];
+  const q = parseInt(qty, 10);
+  if (!isNaN(q)) qty = q;
+  const desc = String(row["SKU Description"] ?? "").trim();
+  const sub = row["Subclass Name"];
+  if (sub && String(sub).trim()) {
+    return `${qty} x ${desc} (${titleCase(String(sub).trim())})`;
+  }
+  return `${qty} x ${desc}`;
+}
+
+// ---- Core transform (mirrors build() in the Python) ----
+function build(summary, details) {
+  // group surviving line items by transaction key
+  const items = new Map();
+  for (const r of details) {
+    if (DROP_DEPARTMENTS.has(r["Department Name"])) continue;
+    if (DROP_CLASSES.has(r["Class Name"])) continue;
+    if (DROP_DESC_RE.test(String(r["SKU Description"] ?? ""))) continue;
+    const k = txnKey(r, "Store Number");
+    if (!items.has(k)) items.set(k, []);
+    items.get(k).push(formatLine(r));
+  }
+
+  // one output row per transaction, de-duped on key
+  const seen = new Set();
+  const out = [];
+  for (const r of summary) {
+    const k = txnKey(r, "Order Origin");
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const lines = items.get(k);
+    if (!lines || !lines.length) continue;   // all-junk or no detail
+    out.push({
+      date: fmtDate(r["Date"]),
+      _sort: r["Date"] ?? "",
+      job: (r["Job Name"] && String(r["Job Name"]).trim()) ? r["Job Name"] : "(no job listed)",
+      total: fmtMoney(money(r["Total Amount Paid"])),
+      items: lines.join("\n"),
+    });
+  }
+  out.sort((a, b) => a._sort.localeCompare(b._sort));
+  return out;
+}
+
+// ---- UI wiring ----
+const dropEl = document.getElementById("drop");
+const picker = document.getElementById("picker");
+const errorEl = document.getElementById("error");
+
+function showError(msg) {
+  errorEl.innerHTML = `<div class="err">${msg}</div>`;
+}
+function clearError() { errorEl.innerHTML = ""; }
+
+function setSlot(kind, filename) {
+  const el = document.getElementById("slot-" + kind);
+  el.classList.remove("empty"); el.classList.add("ready");
+  el.querySelector(".name").textContent = filename;
+}
+
+function handleFiles(fileList) {
+  clearError();
+  const files = Array.from(fileList).filter(f => /\.csv$/i.test(f.name));
+  if (!files.length) { showError("Please choose .csv files exported from Home Depot."); return; }
+
+  let pending = files.length;
+  for (const file of files) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const rows = stripPreambleAndParse(reader.result);
+        const kind = classify(rows);
+        if (!kind) {
+          showError(`<strong>${file.name}</strong> doesn't look like a Home Depot summary or details export. Make sure you grabbed both files from the Purchase History page.`);
+        } else {
+          parsed[kind] = rows;
+          setSlot(kind, file.name);
+        }
+      } catch (e) {
+        showError(`Couldn't read <strong>${file.name}</strong>: ${e.message}`);
+      }
+      if (--pending === 0) maybeRun();
+    };
+    // Home Depot exports are cp1252; read as windows-1252 so °, etc. decode right
+    reader.readAsText(file, "windows-1252");
+  }
+}
+
+function maybeRun() {
+  if (!parsed.summary || !parsed.details) return;
+  try {
+    output = build(parsed.summary, parsed.details);
+    render(output);
+  } catch (e) {
+    showError("Something went wrong processing the files: " + e.message);
+  }
+}
+
+// drag & drop
+["dragenter", "dragover"].forEach(ev =>
+  dropEl.addEventListener(ev, e => { e.preventDefault(); dropEl.classList.add("drag"); }));
+["dragleave", "drop"].forEach(ev =>
+  dropEl.addEventListener(ev, e => { e.preventDefault(); dropEl.classList.remove("drag"); }));
+dropEl.addEventListener("drop", e => handleFiles(e.dataTransfer.files));
+picker.addEventListener("change", e => handleFiles(e.target.files));
+
+// ---- Render ----
+const resultsEl = document.getElementById("results");
+const rowsEl = document.getElementById("rows");
+const countEl = document.getElementById("count");
+const searchEl = document.getElementById("search");
+
+function render(data) {
+  resultsEl.style.display = "block";
+  countEl.textContent = `${data.length} transaction${data.length === 1 ? "" : "s"}`;
+  paint(data);
+}
+
+function paint(data) {
+  if (!data.length) {
+    rowsEl.innerHTML = `<div class="empty-state">No matching transactions.</div>`;
+    return;
+  }
+  rowsEl.innerHTML = "";
+  data.forEach((t, i) => {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML = `
+      <div class="meta">
+        <span class="date">${t.date}</span>
+        <span class="job">${escapeHtml(t.job)}</span>
+        <span class="total">${t.total}</span>
+      </div>
+      <button class="copy" data-i="${i}">Copy row</button>
+      <div class="items">${escapeHtml(t.items)}</div>
+    `;
+    rowsEl.appendChild(row);
+  });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// copy a row as Date<TAB>Total<TAB>Items so it lands in 3 cells (items = one multi-line cell)
+rowsEl.addEventListener("click", e => {
+  const btn = e.target.closest(".copy");
+  if (!btn) return;
+  const t = currentView[+btn.dataset.i];
+  const tsv = `${t.date}\t${t.total}\t${t.items}`;
+
+  const ok = () => {
+    btn.textContent = "Copied ✓"; btn.classList.add("done");
+    setTimeout(() => { btn.textContent = "Copy row"; btn.classList.remove("done"); }, 1400);
+  };
+  const fail = () => {
+    // Clipboard blocked (e.g. file:// or sandboxed preview) — fall back to manual copy.
+    legacyCopy(tsv, btn, ok);
+  };
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(tsv).then(ok).catch(fail);
+  } else {
+    fail();
+  }
+});
+
+// Fallback: drop text into a temp textarea and try execCommand('copy').
+// If even that's blocked, leave the text selected so the user can hit Ctrl/Cmd-C.
+function legacyCopy(text, btn, onOk) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.top = "-1000px";
+  document.body.appendChild(ta);
+  ta.focus(); ta.select();
+  let succeeded = false;
+  try { succeeded = document.execCommand("copy"); } catch (_) {}
+  document.body.removeChild(ta);
+  if (succeeded) { onOk(); return; }
+  // Last resort: tell the user clipboard is blocked here.
+  btn.textContent = "Copy blocked";
+  btn.title = "Your browser blocked clipboard access. This works once the tool is hosted on https (GitHub Pages).";
+  setTimeout(() => { btn.textContent = "Copy row"; btn.title = ""; }, 2200);
+}
+
+let currentView = [];
+function paintAndTrack(data) { currentView = data; paint(data); }
+
+// combined filtering: date cutoff AND job-name search
+const sinceEl = document.getElementById("since");
+
+function applyFilters() {
+  const q = searchEl.value.trim().toLowerCase();
+  const since = sinceEl.value;            // "" or "YYYY-MM-DD" (already sortable)
+  let filtered = output;
+  if (since) filtered = filtered.filter(t => t._sort >= since);
+  if (q) filtered = filtered.filter(t => t.job.toLowerCase().includes(q));
+  countEl.textContent = `${filtered.length} transaction${filtered.length === 1 ? "" : "s"}`;
+  paintAndTrack(filtered);
+}
+
+searchEl.addEventListener("input", applyFilters);
+sinceEl.addEventListener("input", applyFilters);
+document.getElementById("clear-since").addEventListener("click", () => {
+  sinceEl.value = ""; applyFilters();
+});
+
+// override render to keep currentView in sync
+const _render = render;
+render = function (data) { resultsEl.style.display = "block"; countEl.textContent = `${data.length} transaction${data.length===1?"":"s"}`; paintAndTrack(data); };
+
+// download
+document.getElementById("download").addEventListener("click", () => {
+  // export whatever is currently shown (respects the date + search filters)
+  const source = currentView.length ? currentView : output;
+  const rows = [["Date", "Job Name", "Total", "Items"],
+    ...source.map(t => [t.date, t.job, t.total, t.items])];
+  const csv = Papa.unparse(rows);
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "job_sheet_rows.csv";
+  a.click();
+});
+</script>
+</body>
+</html>
