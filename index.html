@@ -249,6 +249,9 @@ function build(summary, details) {
     seen.add(k);
     const lines = items.get(k);
     if (!lines || !lines.length) continue;   // all-junk or no detail
+    // Tag the last line so Dad can tell Home Depot rows from Sherwin-Williams
+    // ones on the job sheet (untagged rows are assumed to be Sherwin).
+    lines[lines.length - 1] = lines[lines.length - 1] + " from HD";
     out.push({
       date: fmtDate(r["Date"]),
       _sort: r["Date"] ?? "",
@@ -367,7 +370,13 @@ rowsEl.addEventListener("click", e => {
   const btn = e.target.closest(".copy");
   if (!btn) return;
   const t = currentView[+btn.dataset.i];
-  const tsv = `${t.date}\t${t.total}\t${t.items}`;
+  // Build a grid: first line gets Date + Total + item 1; each later item is
+  // pushed two columns right (two tabs) so it stacks under the items column
+  // instead of restarting under the date column.
+  const itemLines = t.items.split("\n");
+  const tsv = itemLines
+    .map((line, i) => i === 0 ? `${t.date}\t${t.total}\t${line}` : `\t\t${line}`)
+    .join("\n");
 
   const ok = () => {
     btn.textContent = "Copied ✓"; btn.classList.add("done");
