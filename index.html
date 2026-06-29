@@ -71,6 +71,7 @@
     margin: 22px 0 14px;
   }
   .bar .count { color: var(--muted); font-size: 14px; margin-right: auto; }
+  .bar .count .total { color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; }
   .search {
     border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px;
     font: inherit; min-width: 200px; background: var(--card);
@@ -91,6 +92,11 @@
   .meta .date { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
   .meta .job { font-weight: 700; }
   .meta .total { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .meta .card {
+    font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted);
+    border: 1px solid var(--line); border-radius: 6px; padding: 1px 7px;
+    background: var(--bg);
+  }
   .items {
     grid-column: 1 / -1;
     margin: 6px 0 0; padding: 10px 12px; background: var(--bg);
@@ -208,6 +214,23 @@ function titleCase(s) {
   return String(s).toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 }
 
+// Turn the raw Payment cell into a display string. Display only — never copied.
+//   "X-1215"            -> "X-1215"            (normal last-4)
+//   "X-4006, X-5006"    -> "X-4006, X-5006"    (split payment, show all)
+//   "X-XXXX"            -> "no card on file"   (no last-4 captured)
+//   "03135C4657BA1AAC0S"-> "—"                 (online/token, not a last-4)
+function formatCard(v) {
+  const raw = String(v ?? "").trim();
+  if (!raw) return "—";
+  const parts = raw.split(",").map(s => s.trim()).filter(Boolean);
+  const shown = parts.map(p => /^X-XXXX$/i.test(p) ? "no card on file"
+                              : /^X-\d{4}$/i.test(p) ? p
+                              : null);
+  // if nothing looked like a card (e.g. the long token), show a dash
+  if (shown.every(s => s === null)) return "—";
+  return shown.map(s => s === null ? "—" : s).join(", ");
+}
+
 function txnKey(row, originField) {
   const order = String(row["Order Number"] ?? "").trim();
   if (order) return order;
@@ -252,11 +275,14 @@ function build(summary, details) {
     // Tag the last line so Dad can tell Home Depot rows from Sherwin-Williams
     // ones on the job sheet (untagged rows are assumed to be Sherwin).
     lines[lines.length - 1] = lines[lines.length - 1] + " from HD";
+    const totalNum = money(r["Total Amount Paid"]);
     out.push({
       date: fmtDate(r["Date"]),
       _sort: r["Date"] ?? "",
       job: (r["Job Name"] && String(r["Job Name"]).trim()) ? r["Job Name"] : "(no job listed)",
-      total: fmtMoney(money(r["Total Amount Paid"])),
+      total: fmtMoney(totalNum),
+      _total: totalNum,            // numeric, used for summing filtered results
+      card: formatCard(r["Payment"]),  // display only — never copied to the sheet
       items: lines.join("\n"),
     });
   }
@@ -332,10 +358,12 @@ const rowsEl = document.getElementById("rows");
 const countEl = document.getElementById("count");
 const searchEl = document.getElementById("search");
 
-function render(data) {
-  resultsEl.style.display = "block";
-  countEl.textContent = `${data.length} transaction${data.length === 1 ? "" : "s"}`;
-  paint(data);
+// Build the count + running-total label for whatever set is currently shown.
+function setCountLabel(data) {
+  const sum = data.reduce((acc, t) => acc + t._total, 0);
+  countEl.innerHTML =
+    `${data.length} transaction${data.length === 1 ? "" : "s"} · ` +
+    `<span class="total">${fmtMoney(sum)} total</span>`;
 }
 
 function paint(data) {
@@ -352,6 +380,7 @@ function paint(data) {
         <span class="date">${t.date}</span>
         <span class="job">${escapeHtml(t.job)}</span>
         <span class="total">${t.total}</span>
+        <span class="card" title="Card last 4 — for your reference, not copied to the sheet">${escapeHtml(t.card)}</span>
       </div>
       <button class="copy" data-i="${i}">Copy row</button>
       <div class="items">${escapeHtml(t.items)}</div>
@@ -425,7 +454,7 @@ function applyFilters() {
   let filtered = output;
   if (since) filtered = filtered.filter(t => t._sort >= since);
   if (q) filtered = filtered.filter(t => t.job.toLowerCase().includes(q));
-  countEl.textContent = `${filtered.length} transaction${filtered.length === 1 ? "" : "s"}`;
+  setCountLabel(filtered);
   paintAndTrack(filtered);
 }
 
@@ -435,9 +464,12 @@ document.getElementById("clear-since").addEventListener("click", () => {
   sinceEl.value = ""; applyFilters();
 });
 
-// override render to keep currentView in sync
-const _render = render;
-render = function (data) { resultsEl.style.display = "block"; countEl.textContent = `${data.length} transaction${data.length===1?"":"s"}`; paintAndTrack(data); };
+// render: show all rows and the running total for the full set
+function render(data) {
+  resultsEl.style.display = "block";
+  setCountLabel(data);
+  paintAndTrack(data);
+}
 
 // download
 document.getElementById("download").addEventListener("click", () => {
